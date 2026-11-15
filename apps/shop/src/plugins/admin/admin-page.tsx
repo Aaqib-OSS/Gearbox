@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { docsUrl } from "@g3/site-config";
 import {
   Badge,
   Button,
@@ -211,8 +212,8 @@ export function AdminPage() {
           {data ? <ActionsLog data={data} /> : <Loading />}
         </Section>
 
-        {/* Section 2: Shop Settings */}
-        <Section title="Shop Settings" defaultOpen={false}>
+        {/* Section 2: Processes & Subsystems */}
+        <Section title="Processes & Subsystems" defaultOpen={false}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <NameList
               title="Subsystems"
@@ -561,7 +562,7 @@ function QualityControlSettings() {
         <h3 className={sectionHeading}>Require Quality Control</h3>
         {steps.length === 0 ? (
           <p className="text-xs text-secondary-500">
-            Add a process with the type Quality Control under Shop Settings first.
+            Add a process with the type Quality Control under Processes & Subsystems first.
           </p>
         ) : (
           <>
@@ -733,6 +734,23 @@ function ListHeading({
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 /**
  * One subsystem or process. Admins remove it, after a question in the row saying what will
  * happen, or restore it once removed. `blocked` says why it can't be removed now.
@@ -761,7 +779,7 @@ function ItemRow({
   return (
     <div className="flex flex-wrap items-center gap-2 bg-page border border-secondary-200 rounded-lg px-3.5 py-2 text-sm text-secondary-900">
       <span
-        className={`flex-1 min-w-0 truncate ${archived ? "text-secondary-500" : ""}`}
+        className={`flex-1 min-w-32 truncate ${archived ? "text-secondary-500" : ""}`}
         title={name}
       >
         {name}
@@ -774,9 +792,15 @@ function ItemRow({
           </Button>
         ) : (
           !asking && (
-            <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
-              Remove
-            </Button>
+            <button
+              type="button"
+              onClick={() => setAsking(true)}
+              aria-label={`Remove ${name}`}
+              title="Remove"
+              className={`shrink-0 rounded p-1 text-secondary-500 hover:text-red-600 transition-colors ${focusRing}`}
+            >
+              <TrashIcon />
+            </button>
           )
         ))}
       {asking &&
@@ -968,6 +992,20 @@ function ProcessList({
         setShowRemoved={setShowRemoved}
       />
       {isAdmin && (
+        <p className="text-xs text-secondary-500">
+          Don't understand a setting?{" "}
+          <a
+            href={`${docsUrl("shop")}/setup#processes`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary-600 hover:underline"
+          >
+            Read about processes
+          </a>
+          .
+        </p>
+      )}
+      {isAdmin && (
         <div className="flex flex-wrap gap-2">
           <TextField
             kind="process"
@@ -1025,13 +1063,15 @@ type OnShapeStatus = {
   companyId: string;
   hasApiKey: boolean;
   hasWebhookKeys: boolean;
+  hasSecondaryWebhookKey: boolean;
   fromWorkerSecrets: boolean;
   webhookUrl: string;
 };
 
 /**
  * The team's Onshape connection: the document Shop follows, and the team's own API keys and
- * webhook signing keys from Onshape's Developer Portal. Keys are never shown again once saved;
+ * webhook signing keys (API keys from Onshape's Developer Portal, signing keys from the company's
+ * settings, under Webhooks). Keys are never shown again once saved;
  * leave them blank to keep them.
  */
 function OnShapeConfig() {
@@ -1127,7 +1167,12 @@ function OnShapeConfig() {
                 ok: false,
                 text: "Saved, but Onshape refused the webhook. Check the keys and company.",
               }
-            : { ok: true, text: "Saved. Add the API keys and company ID to receive releases." },
+            : result.webhook === "needs signing keys"
+              ? {
+                  ok: false,
+                  text: "Saved, but Shop can't accept releases until you add the webhook signing keys from Onshape's company settings.",
+                }
+              : { ok: true, text: "Saved. Add the API keys and company ID to receive releases." },
       );
       await loadConfig();
       refreshOnshapeStatus();
@@ -1138,11 +1183,23 @@ function OnShapeConfig() {
     }
   }
 
-  const keptHint = (saved: boolean | undefined) =>
-    saved ? "Saved; leave blank to keep it" : "From Onshape's Developer Portal";
+  // A saved key shows as dots; typing replaces it, and a blank box keeps it.
+  const saved = (has: boolean | undefined) => (has ? "••••••••••••••••••••••••" : undefined);
 
   return (
     <div className="space-y-4 max-w-xl">
+      <p className="text-xs text-secondary-500">
+        Need help connecting Onshape?{" "}
+        <a
+          href={`${docsUrl("shop")}/setup#connect-onshape`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary-600 hover:underline"
+        >
+          Read the setup guide
+        </a>
+        .
+      </p>
       {banner &&
         (banner.ok ? (
           <SuccessBanner message={banner.text} />
@@ -1158,7 +1215,7 @@ function OnShapeConfig() {
 
       <div className="p-3 bg-page rounded-lg border border-secondary-200 space-y-2">
         <p className="text-sm font-medium text-secondary-700">
-          Fill in from the document's address
+          Paste the main assembly's address to fill in the document and assembly IDs
         </p>
         <div className="flex gap-2">
           <TextField
@@ -1177,10 +1234,7 @@ function OnShapeConfig() {
         </div>
       </div>
 
-      <Field
-        label="Document ID"
-        hint="From the document's address: cad.onshape.com/documents/[DOCUMENT_ID]/..."
-      >
+      <Field label="Document ID">
         <TextField
           typeable
           value={documentId}
@@ -1189,10 +1243,7 @@ function OnShapeConfig() {
         />
       </Field>
 
-      <Field
-        label="Main Assembly ID"
-        hint="Optional: fills in how many of each part a release needs"
-      >
+      <Field label="Main Assembly ID">
         <TextField
           typeable
           value={mainAssemblyId}
@@ -1201,7 +1252,7 @@ function OnShapeConfig() {
         />
       </Field>
 
-      <Field label="Company ID">
+      <Field label="Classroom/ Company ID">
         <TextField
           typeable
           value={companyId}
@@ -1211,38 +1262,42 @@ function OnShapeConfig() {
       </Field>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="API access key" hint={keptHint(status?.hasApiKey)}>
+        <Field label="API access key">
           <input
             type="password"
             autoComplete="off"
             value={apiKey}
+            placeholder={saved(status?.hasApiKey)}
             onChange={(e) => setApiKey(e.target.value)}
             className={inputClass}
           />
         </Field>
-        <Field label="API secret key" hint={keptHint(status?.hasApiKey)}>
+        <Field label="API secret key">
           <input
             type="password"
             autoComplete="off"
             value={apiSecret}
+            placeholder={saved(status?.hasApiKey)}
             onChange={(e) => setApiSecret(e.target.value)}
             className={inputClass}
           />
         </Field>
-        <Field label="Webhook signing key (primary)" hint={keptHint(status?.hasWebhookKeys)}>
+        <Field label="Webhook signing key (primary)">
           <input
             type="password"
             autoComplete="off"
             value={webhookKeyPrimary}
+            placeholder={saved(status?.hasWebhookKeys)}
             onChange={(e) => setWebhookKeyPrimary(e.target.value)}
             className={inputClass}
           />
         </Field>
-        <Field label="Webhook signing key (secondary)" hint={keptHint(status?.hasWebhookKeys)}>
+        <Field label="Webhook signing key (secondary)">
           <input
             type="password"
             autoComplete="off"
             value={webhookKeySecondary}
+            placeholder={saved(status?.hasSecondaryWebhookKey)}
             onChange={(e) => setWebhookKeySecondary(e.target.value)}
             className={inputClass}
           />
